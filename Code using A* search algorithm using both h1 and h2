@@ -1,0 +1,210 @@
+#include <iostream>
+#include <queue>
+#include <climits>
+#include <unordered_set>
+
+using namespace std;
+
+#define N 3
+#define MAX_DEPTH 30
+
+// Node structure to represent the state of the puzzle
+struct Node
+{
+    int mat[N][N];     // Puzzle configuration
+    int x, y;          // Empty tile coordinates
+    int cost;          // Total cost (g + h)
+    int level;         // Depth level in the search tree
+    Node* parent;      // Parent node in the search tree
+};
+
+// Function to print the puzzle matrix
+void printMatrix(int mat[N][N])
+{
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+            cout << mat[i][j] << " ";
+        cout << endl;
+    }
+}
+
+// Function to create a new node representing a state transition
+Node* newNode(int mat[N][N], int x, int y, int newX, int newY, int level, Node* parent)
+{
+    Node* node = new Node;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            node->mat[i][j] = mat[i][j];
+        }
+    }
+    int temp = node->mat[x][y];
+    node->mat[x][y] = node->mat[newX][newY];
+    node->mat[newX][newY] = temp;
+    node->cost = INT_MAX;
+    node->level = level;
+    node->parent = parent;
+    node->x = newX;
+    node->y = newY;
+    return node;
+}
+
+// Function to calculate the number of misplaced tiles (h1 heuristic)
+int calculateH1(int mat[N][N], int final[N][N])
+{
+    int count = 0;
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++)
+            if (mat[i][j] && mat[i][j] != final[i][j])
+                count++;
+    return count;
+}
+
+// Function to calculate the Manhattan distance (h2 heuristic)
+int calculateH2(int mat[N][N], int final[N][N])
+{
+    int distance = 0;
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+        {
+            int value = mat[i][j];
+            if (value != 0)
+            {
+                int targetX = (value - 1) / N;
+                int targetY = (value - 1) % N;
+                distance += abs(i - targetX) + abs(j - targetY);
+            }
+        }
+    }
+    return distance;
+}
+
+// Function to check if a move is within bounds
+bool isSafe(int x, int y)
+{
+    return (x >= 0 && x < N && y >= 0 && y < N);
+}
+
+// Function to print the solution path from the initial state to the goal state
+void printPath(Node* root)
+{
+    if (root == NULL)
+        return;
+    printPath(root->parent);
+    printMatrix(root->mat);
+    cout << endl;
+}
+
+// Comparator structure for the priority queue based on total cost
+struct comp
+{
+    bool operator()(const Node* lhs, const Node* rhs) const
+    {
+        return lhs->cost > rhs->cost;
+    }
+};
+
+// Possible moves: down, left, up, right
+int row[] = { 1, 0, -1, 0 };
+int col[] = { 0, -1, 0, 1 };
+
+// Function to solve the 8-puzzle using A* algorithm
+void solveAStar(int initial[N][N], int x, int y, int final[N][N], int heuristicChoice)
+{
+    // Priority queue to store nodes based on total cost
+    priority_queue<Node*, vector<Node*>, comp> pq;
+
+    // Create the root node representing the initial state
+    Node* root = newNode(initial, x, y, x, y, 0, NULL);
+
+    // Choose the appropriate heuristic
+    if (heuristicChoice == 1)
+        root->cost = calculateH1(initial, final);
+    else if (heuristicChoice == 2)
+        root->cost = calculateH2(initial, final);
+
+    pq.push(root);
+
+    // A* algorithm
+    while (!pq.empty())
+    {
+        // Get the node with the minimum total cost from the priority queue
+        Node* min = pq.top();
+        pq.pop();
+
+        // Print debug information
+        cout << "Level: " << min->level << ", Cost: " << min->cost << endl;
+
+        // Check if the goal state is reached
+        if (min->cost == 0)
+        {
+            cout << "Solution using h" << heuristicChoice << " heuristic:\n";
+            printPath(min);
+            delete min; // Free memory for the goal node
+            return;
+        }
+
+        // Generate child nodes for possible moves
+        for (int i = 0; i < 4; i++)
+        {
+            if (isSafe(min->x + row[i], min->y + col[i]))
+            {
+                Node* child = newNode(min->mat, min->x, min->y, min->x + row[i], min->y + col[i], min->level + 1, min);
+
+                // Choose the appropriate heuristic for the child node
+                if (heuristicChoice == 1)
+                    child->cost = calculateH1(child->mat, final) + child->level;
+                else if (heuristicChoice == 2)
+                    child->cost = calculateH2(child->mat, final) + child->level;
+
+                // Print debug information
+                cout << "Child Level: " << child->level << ", Cost: " << child->cost << endl;
+
+                // Limit the search depth
+                if (child->level <= MAX_DEPTH)
+                    pq.push(child);
+                else
+                {
+                    cout << "Node exceeded depth limit. Level: " << child->level << endl;
+                    delete child; // Free memory for nodes exceeding the depth limit
+                }
+            }
+        }
+
+        // Free memory for the current node (except the root)
+        if (min->parent != NULL)
+            delete min;
+    }
+
+    // If the queue is empty and no solution is found
+    cout << "No solution found.\n";
+}
+
+int main()
+{
+    // Initial and goal states for the 8-puzzle
+    int initial[N][N] =
+    {
+        {8, 0, 6},
+        {5, 4, 7},
+        {2, 3, 1}
+    };
+
+    int final[N][N] =
+    {
+        {0, 1, 2},
+        {3, 4, 5},
+        {6, 7, 8}
+    };
+
+    int x = 1, y = 2; // Coordinates of the empty tile
+
+    // Solve the puzzle using A* algorithm with h1 (number of misplaced tiles)
+    solveAStar(initial, x, y, final, 1);
+
+    // Solve the puzzle using A* algorithm with h2 (Manhattan distance)
+    solveAStar(initial, x, y, final, 2);
+
+    return 0;
+}
